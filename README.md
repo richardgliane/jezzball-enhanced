@@ -1,6 +1,6 @@
-# JezzBall Enhanced
+# Jezzball - xAI, Windsurf
 
-A modern HTML5 Canvas implementation of the classic JezzBall arcade game. Players strategically draw walls to section off areas while avoiding bouncing balls.
+A modern HTML5 Canvas implementation of the classic JezzBall arcade game, created using xAI and Windsurf IDE. Players strategically draw walls to section off areas while avoiding bouncing balls.
 
 ![JezzBall Enhanced Gameplay](screenshot.png)
 
@@ -32,7 +32,7 @@ git clone https://github.com/richardgliane/jezzball-enhanced.git
 
 2. Navigate to the project directory:
 ```bash
-cd jezzball-enhanced
+cd jezzball-windsurf
 ```
 
 3. Start a local server (using Python or any other HTTP server):
@@ -54,6 +54,7 @@ http://localhost:8000
 - HTML5 Canvas
 - JavaScript (ES6+)
 - CSS3
+- Created using xAI in Windsurf IDE
 
 ## 🎯 Game Mechanics
 
@@ -69,7 +70,7 @@ MIT License - feel free to use and modify for your own projects!
 
 ## 🤝 Contributing
 
-Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/richardgliane/jezzball-enhanced/issues).
+Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/yourusername/jezzball-windsurf/issues).
 
 ## 🙏 Acknowledgments
 
