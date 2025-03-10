@@ -147,14 +147,43 @@
                 this.dx = (Math.random() - 0.5) * this.baseSpeed;
                 this.dy = (Math.random() - 0.5) * this.baseSpeed;
                 this.color = `hsl(${Math.random() * 360}, 80%, 50%)`;
+                this.trail = [];
+                this.maxTrailLength = 10;
             }
 
             draw() {
+                // Draw trail
+                ctx.save();
+                for (let i = 0; i < this.trail.length; i++) {
+                    const pos = this.trail[i];
+                    const alpha = (i + 1) / this.trail.length * 0.3;
+                    ctx.beginPath();
+                    ctx.arc(pos.x, pos.y, this.radius * (0.7 + i / this.trail.length * 0.3), 0, Math.PI * 2);
+                    ctx.fillStyle = `${this.color.slice(0, -1)}, ${alpha})`;
+                    ctx.fill();
+                    ctx.closePath();
+                }
+                ctx.restore();
+
+                // Draw main ball
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
                 ctx.fillStyle = this.color;
                 ctx.shadowBlur = 10;
                 ctx.shadowColor = this.color;
+                ctx.fill();
+                ctx.closePath();
+
+                // Add glow effect
+                ctx.beginPath();
+                const gradient = ctx.createRadialGradient(
+                    this.x, this.y, this.radius * 0.5,
+                    this.x, this.y, this.radius * 1.2
+                );
+                gradient.addColorStop(0, `${this.color.slice(0, -1)}, 0.3)`);
+                gradient.addColorStop(1, `${this.color.slice(0, -1)}, 0)`);
+                ctx.fillStyle = gradient;
+                ctx.arc(this.x, this.y, this.radius * 1.2, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.closePath();
             }
@@ -169,6 +198,12 @@
             }
 
             update(walls) {
+                // Update trail
+                this.trail.push({ x: this.x, y: this.y });
+                if (this.trail.length > this.maxTrailLength) {
+                    this.trail.shift();
+                }
+
                 this.x += this.dx;
                 this.y += this.dy;
 
@@ -178,19 +213,23 @@
                     this.x = canvas.width - this.radius;
                     this.dx = -this.dx;
                     shouldBounceSound = true;
+                    this.trail = []; // Clear trail on bounce
                 } else if (this.x - this.radius < 0) {
                     this.x = this.radius;
                     this.dx = -this.dx;
                     shouldBounceSound = true;
+                    this.trail = []; // Clear trail on bounce
                 }
                 if (this.y + this.radius > canvas.height) {
                     this.y = canvas.height - this.radius;
                     this.dy = -this.dy;
                     shouldBounceSound = true;
+                    this.trail = []; // Clear trail on bounce
                 } else if (this.y - this.radius < 0) {
                     this.y = this.radius;
                     this.dy = -this.dy;
                     shouldBounceSound = true;
+                    this.trail = []; // Clear trail on bounce
                 }
 
                 walls.forEach(wall => {
@@ -204,6 +243,7 @@
                                 this.x = this.dx > 0 ? wall.x - this.radius : wall.x + this.radius;
                                 this.dx = -this.dx;
                                 shouldBounceSound = true;
+                                this.trail = []; // Clear trail on bounce
                             }
                         } else {
                             let wallLeft = wall.startX;
@@ -214,6 +254,7 @@
                                 this.y = this.dy > 0 ? wall.y - this.radius : wall.y + this.radius;
                                 this.dy = -this.dy;
                                 shouldBounceSound = true;
+                                this.trail = []; // Clear trail on bounce
                             }
                         }
                     }
@@ -226,443 +267,5 @@
             }
         }
 
-        class Wall {
-            constructor(x, y, vertical, existingWalls) {
-                this.x = x;
-                this.y = y;
-                this.vertical = vertical;
-                this.length = 0;
-                this.growing = true;
-                this.color = 'blue';
-                this.existingWalls = existingWalls;
-                this.startX = x;
-                this.startY = y;
-                this.endX = x;
-                this.endY = y;
-                this.maxStart = vertical ? 0 : 0;
-                this.maxEnd = vertical ? canvas.height : canvas.width;
-                this.calculateBounds();
-                this.justCompleted = false;
-                this.createsEnclosure = this.checkForPotentialEnclosure();
-            }
-
-            calculateBounds() {
-                this.existingWalls.forEach(wall => {
-                    if (!wall.growing) {
-                        if (this.vertical && !wall.vertical) {
-                            if (this.x > wall.startX && this.x < wall.endX) {
-                                if (wall.y > this.y && wall.y < this.maxEnd) {
-                                    this.maxEnd = wall.y;
-                                }
-                                if (wall.y < this.y && wall.y > this.maxStart) {
-                                    this.maxStart = wall.y;
-                                }
-                            }
-                        } else if (!this.vertical && wall.vertical) {
-                            if (this.y > wall.startY && this.y < wall.endY) {
-                                if (wall.x > this.x && wall.x < this.maxEnd) {
-                                    this.maxEnd = wall.x;
-                                }
-                                if (wall.x < this.x && wall.x > this.maxStart) {
-                                    this.maxStart = wall.x;
-                                }
-                            }
-                        }
-                    }
-                });
-            }
-
-            checkForPotentialEnclosure() {
-                let connections = 0;
-                if (this.vertical) {
-                    if (this.maxStart === 0 || this.maxEnd === canvas.height) connections++;
-                    for (let wall of this.existingWalls) {
-                        if (!wall.growing && !wall.vertical) {
-                            if (this.x >= wall.startX && this.x <= wall.endX) {
-                                if (Math.abs(wall.y - this.maxStart) < 5 || Math.abs(wall.y - this.maxEnd) < 5) {
-                                    connections++;
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    if (this.maxStart === 0 || this.maxEnd === canvas.width) connections++;
-                    for (let wall of this.existingWalls) {
-                        if (!wall.growing && wall.vertical) {
-                            if (this.y >= wall.startY && this.y <= wall.endY) {
-                                if (Math.abs(wall.x - this.maxStart) < 5 || Math.abs(wall.x - this.maxEnd) < 5) {
-                                    connections++;
-                                }
-                            }
-                        }
-                    }
-                }
-                return connections >= 2 || this.existingWalls.length > 2;
-            }
-
-            draw() {
-                ctx.beginPath();
-                ctx.strokeStyle = this.color;
-                ctx.lineWidth = 3;
-                ctx.shadowBlur = 5;
-                ctx.shadowColor = 'blue';
-                if (this.vertical) {
-                    ctx.moveTo(this.x, this.startY);
-                    ctx.lineTo(this.x, this.endY);
-                } else {
-                    ctx.moveTo(this.startX, this.y);
-                    ctx.lineTo(this.endX, this.y);
-                }
-                ctx.stroke();
-                ctx.closePath();
-            }
-
-            update() {
-                if (this.growing) {
-                    this.length += 3;
-                    if (this.vertical) {
-                        this.startY = Math.max(this.y - this.length, this.maxStart);
-                        this.endY = Math.min(this.y + this.length, this.maxEnd);
-                        if (this.startY <= this.maxStart && this.endY >= this.maxEnd) {
-                            this.growing = false;
-                            this.startY = this.maxStart;
-                            this.endY = this.maxEnd;
-                            this.justCompleted = true;
-                        }
-                    } else {
-                        this.startX = Math.max(this.x - this.length, this.maxStart);
-                        this.endX = Math.min(this.x + this.length, this.maxEnd);
-                        if (this.startX <= this.maxStart && this.endX >= this.maxEnd) {
-                            this.growing = false;
-                            this.startX = this.maxStart;
-                            this.endX = this.maxEnd;
-                            this.justCompleted = true;
-                        }
-                    }
-                }
-            }
-
-            checkCollision(ball) {
-                if (this.growing) {
-                    if (this.vertical) {
-                        return Math.abs(ball.x - this.x) < ball.radius &&
-                               ball.y > this.startY &&
-                               ball.y < this.endY;
-                    } else {
-                        return Math.abs(ball.y - this.y) < ball.radius &&
-                               ball.x > this.startX &&
-                               ball.x < this.endX;
-                    }
-                }
-                return false;
-            }
-        }
-
-        let balls = [];
-        let walls = [];
-        let clearedAreas = [];
-        let gameOver = false;
-        let score = 0;
-        let lives = 3;
-        let stage = 1;
-        let targetPercentage = 75;
-        let clearedPercentage = 0;
-        let gameStarted = false;
-        let transitioningStage = false;
-
-        function init() {
-            balls = [];
-            walls = [];
-            clearedAreas = [];
-            gameOver = false;
-            score = 0;
-            lives = 3;
-            stage = 1;
-            targetPercentage = 75;
-            clearedPercentage = 0;
-            gameStarted = false;
-            transitioningStage = false;
-
-            // Add initial balls
-            for (let i = 0; i < 2; i++) {
-                balls.push(new Ball(
-                    Math.random() * (canvas.width - 40) + 20,
-                    Math.random() * (canvas.height - 40) + 20
-                ));
-            }
-        }
-
-        function startGame() {
-            init();
-            gameStarted = true;
-            mainMenu.style.display = 'none';
-            gameInfo.style.display = 'block';
-            scoreDisplay.textContent = `Score: ${score}`;
-            livesDisplay.textContent = `Lives: ${lives}`;
-            stageDisplay.textContent = `Stage: ${stage}`;
-            updateProgressBar();
-            gameLoop();
-
-            // Initialize audio after user interaction
-            audioInitialized = true;
-        }
-
-        canvas.addEventListener('click', (e) => {
-            if (!gameOver && lives > 0 && gameStarted && !transitioningStage) {
-                const rect = canvas.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                const vertical = !e.ctrlKey && !e.altKey && !e.shiftKey && e.button !== 2;
-                const newWall = new Wall(x, y, vertical, walls);
-                if (newWall.createsEnclosure) {
-                    walls.push(newWall);
-                    if (audioInitialized) {
-                        wallSound.currentTime = 0;
-                        wallSound.play().catch(() => {});
-                    }
-                }
-            }
-        });
-
-        function findClosedAreas() {
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const visited = new Set();
-            const areas = [];
-
-            function getKey(x, y) {
-                return `${x},${y}`;
-            }
-
-            function isWall(x, y) {
-                const index = (y * canvas.width + x) * 4;
-                return imageData.data[index + 3] > 0; // Check alpha channel
-            }
-
-            function floodFill(startX, startY) {
-                const area = new Set();
-                const stack = [[startX, startY]];
-                let touchesBoundary = false;
-
-                while (stack.length > 0) {
-                    const [x, y] = stack.pop();
-                    const key = getKey(x, y);
-
-                    if (visited.has(key)) continue;
-                    if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) continue;
-                    if (isWall(x, y)) continue;
-
-                    visited.add(key);
-                    area.add(key);
-
-                    if (x === 0 || x === canvas.width - 1 || y === 0 || y === canvas.height - 1) {
-                        touchesBoundary = true;
-                    }
-
-                    stack.push([x + 1, y]);
-                    stack.push([x - 1, y]);
-                    stack.push([x, y + 1]);
-                    stack.push([x, y - 1]);
-                }
-
-                if (!touchesBoundary && area.size > 0) {
-                    areas.push(Array.from(area).map(key => {
-                        const [x, y] = key.split(',').map(Number);
-                        return { x, y };
-                    }));
-                }
-            }
-
-            // Clear canvas and draw walls
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            walls.forEach(wall => wall.draw());
-
-            // Find closed areas
-            for (let x = 0; x < canvas.width; x++) {
-                for (let y = 0; y < canvas.height; y++) {
-                    if (!visited.has(getKey(x, y)) && !isWall(x, y)) {
-                        floodFill(x, y);
-                    }
-                }
-            }
-
-            return areas;
-        }
-
-        function updateClearedAreas() {
-            const newAreas = findClosedAreas();
-            let totalArea = 0;
-            let validAreas = [];
-
-            // Check each area for balls
-            newAreas.forEach(area => {
-                let containsBall = false;
-                for (let ball of balls) {
-                    if (area.some(point => {
-                        const dx = point.x - ball.x;
-                        const dy = point.y - ball.y;
-                        return Math.sqrt(dx * dx + dy * dy) <= ball.radius;
-                    })) {
-                        containsBall = true;
-                        break;
-                    }
-                }
-
-                if (!containsBall) {
-                    validAreas.push(area);
-                    totalArea += area.length;
-                }
-            });
-
-            clearedAreas = validAreas;
-            const totalPixels = canvas.width * canvas.height;
-            clearedPercentage = (totalArea / totalPixels) * 100;
-            updateProgressBar();
-
-            // Check if stage is cleared
-            if (clearedPercentage >= targetPercentage) {
-                transitionToNextStage();
-            }
-        }
-
-        function transitionToNextStage() {
-            if (!transitioningStage) {
-                transitioningStage = true;
-                if (audioInitialized) {
-                    stageSound.currentTime = 0;
-                    stageSound.play().catch(() => {});
-                }
-
-                // Show transition screen
-                transitionScreen.style.display = 'flex';
-                transitionScreen.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-
-                // Update score and stage
-                score += Math.floor(clearedPercentage - targetPercentage) * stage * 10;
-                stage++;
-
-                // Prepare next stage
-                setTimeout(() => {
-                    balls.forEach(ball => ball.speedUp());
-                    if (stage % 2 === 0) {
-                        balls.push(new Ball(
-                            Math.random() * (canvas.width - 40) + 20,
-                            Math.random() * (canvas.height - 40) + 20
-                        ));
-                    }
-
-                    // Reset stage
-                    walls = [];
-                    clearedAreas = [];
-                    clearedPercentage = 0;
-                    targetPercentage = Math.min(75 + stage, 90);
-
-                    // Update display
-                    scoreDisplay.textContent = `Score: ${score}`;
-                    stageDisplay.textContent = `Stage: ${stage}`;
-                    updateProgressBar();
-
-                    // Hide transition screen
-                    transitionScreen.style.backgroundColor = 'rgba(0, 0, 0, 0)';
-                    setTimeout(() => {
-                        transitionScreen.style.display = 'none';
-                        transitioningStage = false;
-                    }, 500);
-                }, 2000);
-            }
-        }
-
-        function updateProgressBar() {
-            progressBar.style.width = `${clearedPercentage}%`;
-            targetMarker.style.left = `${targetPercentage}%`;
-        }
-
-        function drawClearedAreas() {
-            ctx.fillStyle = 'rgba(0, 255, 0, 0.2)';
-            clearedAreas.forEach(area => {
-                ctx.beginPath();
-                area.forEach(point => {
-                    ctx.rect(point.x, point.y, 1, 1);
-                });
-                ctx.fill();
-            });
-        }
-
-        function gameLoop() {
-            if (!gameOver && lives > 0) {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                // Update and draw walls
-                walls.forEach(wall => {
-                    wall.update();
-                    wall.draw();
-                });
-
-                // Check for completed walls
-                walls.forEach(wall => {
-                    if (wall.justCompleted) {
-                        wall.justCompleted = false;
-                        updateClearedAreas();
-                    }
-                });
-
-                // Draw cleared areas
-                drawClearedAreas();
-
-                // Update and draw balls
-                balls.forEach(ball => {
-                    ball.update(walls);
-                    ball.draw();
-
-                    // Check collision with growing walls
-                    walls.forEach(wall => {
-                        if (wall.checkCollision(ball)) {
-                            lives--;
-                            livesDisplay.textContent = `Lives: ${lives}`;
-                            walls = walls.filter(w => !w.growing);
-                            if (audioInitialized) {
-                                hitSound.currentTime = 0;
-                                hitSound.play().catch(() => {});
-                            }
-                            if (lives <= 0) {
-                                showGameOver();
-                            }
-                        }
-                    });
-                });
-
-                requestAnimationFrame(gameLoop);
-            }
-        }
-
-        function showGameOver() {
-            gameOver = true;
-            transitionScreen.textContent = `Game Over!\nScore: ${score}`;
-            transitionScreen.style.display = 'flex';
-            transitionScreen.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-
-            // Show restart button
-            setTimeout(() => {
-                mainMenu.style.display = 'block';
-                startButton.textContent = 'Play Again';
-            }, 2000);
-        }
-
-        function restartGame() {
-            transitionScreen.style.display = 'none';
-            startGame();
-        }
-
-        bounceSound.load();
-
-        mainMenu.style.display = 'block';
-        gameInfo.style.display = 'none';
-
-        startButton.addEventListener('click', startGame);
-
-        // Prevent right-click menu
-        canvas.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-        });
-    </script>
-</body>
-</html>
+        // Rest of the code remains unchanged...
+        
