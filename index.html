@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>JezzBall Enhanced</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            position: relative;
+        }
+        #gameContainer {
+            position: relative;
+            text-align: center;
+        }
+        canvas { 
+            border: 1px solid black;
+            display: block;
+        }
+        #gameInfo { 
+            font-family: Arial, sans-serif; 
+            margin: 10px 0;
+            text-align: center;
+            display: none;
+            width: 800px;
+        }
+        #mainMenu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            font-family: Arial, sans-serif;
+        }
+        #mainMenu h1 {
+            margin: 0 0 20px 0;
+        }
+        #mainMenu button {
+            padding: 10px 20px;
+            font-size: 20px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        #mainMenu button:hover {
+            background-color: #45a049;
+        }
+        #progressContainer {
+            width: 100%;
+            background-color: #ddd;
+            height: 20px;
+            position: relative;
+            border-radius: 5px;
+            margin-top: 5px;
+        }
+        #progressBar {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 0%;
+            border-radius: 5px;
+            transition: width 0.3s ease;
+        }
+        #targetMarker {
+            position: absolute;
+            height: 100%;
+            width: 2px;
+            background-color: red;
+            top: 0;
+        }
+        #infoText {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+        }
+        #transitionScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 800px;
+            height: 620px;
+            background-color: rgba(0, 0, 0, 0);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 48px;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="gameInfo">
+            <div id="infoText">
+                <span id="score">Score: 0</span>
+                <span id="lives">Lives: 3</span>
+                <span id="stage">Stage: 1</span>
+            </div>
+            <div id="progressContainer">
+                <div id="progressBar"></div>
+                <div id="targetMarker"></div>
+            </div>
+        </div>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="transitionScreen">Stage Clear!</div>
+    </div>
+    <div id="mainMenu">
+        <h1>JezzBall Enhanced</h1>
+        <button id="startButton">Start Game</button>
+    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score');
+        const livesDisplay = document.getElementById('lives');
+        const stageDisplay = document.getElementById('stage');
+        const gameInfo = document.getElementById('gameInfo');
+        const mainMenu = document.getElementById('mainMenu');
+        const startButton = document.getElementById('startButton');
+        const progressBar = document.getElementById('progressBar');
+        const targetMarker = document.getElementById('targetMarker');
+        const transitionScreen = document.getElementById('transitionScreen');
+
+        // Preload sounds
+        const wallSound = new Audio('https://www.myinstants.com/media/sounds/click.mp3');
+        const hitSound = new Audio('https://www.myinstants.com/media/sounds/error.mp3');
+        const bounceSound = new Audio('https://cdn.freesound.org/previews/320/320968_5260872-lq.mp3');
+        const stageSound = new Audio('https://www.myinstants.com/media/sounds/level-up.mp3');
+        bounceSound.volume = 0.8;
+        bounceSound.preload = 'auto';
+
+        let audioInitialized = false;
+
+        class Ball {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = 12;
+                this.baseSpeed = 2.5;
+                this.dx = (Math.random() - 0.5) * this.baseSpeed;
+                this.dy = (Math.random() - 0.5) * this.baseSpeed;
+                this.color = `hsl(${Math.random() * 360}, 80%, 50%)`;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.color;
+                ctx.fill();
+                ctx.closePath();
+            }
+
+            speedUp() {
+                const speedIncrease = 1.1;
+                this.dx *= speedIncrease;
+                this.dy *= speedIncrease;
+                const maxSpeed = 10;
+                if (Math.abs(this.dx) > maxSpeed) this.dx = Math.sign(this.dx) * maxSpeed;
+                if (Math.abs(this.dy) > maxSpeed) this.dy = Math.sign(this.dy) * maxSpeed;
+            }
+
+            update(walls) {
+                this.x += this.dx;
+                this.y += this.dy;
+
+                let shouldBounceSound = false;
+
+                if (this.x + this.radius > canvas.width) {
+                    this.x = canvas.width - this.radius;
+                    this.dx = -this.dx;
+                    shouldBounceSound = true;
+                } else if (this.x - this.radius < 0) {
+                    this.x = this.radius;
+                    this.dx = -this.dx;
+                    shouldBounceSound = true;
+                }
+                if (this.y + this.radius > canvas.height) {
+                    this.y = canvas.height - this.radius;
+                    this.dy = -this.dy;
+                    shouldBounceSound = true;
+                } else if (this.y - this.radius < 0) {
+                    this.y = this.radius;
+                    this.dy = -this.dy;
+                    shouldBounceSound = true;
+                }
+
+                walls.forEach(wall => {
+                    if (!wall.growing) {
+                        if (wall.vertical) {
+                            let wallTop = wall.startY;
+                            let wallBottom = wall.endY;
+                            if (Math.abs(this.x - wall.x) < this.radius &&
+                                this.y > wallTop &&
+                                this.y < wallBottom) {
+                                this.x = this.dx > 0 ? wall.x - this.radius : wall.x + this.radius;
+                                this.dx = -this.dx;
+                                shouldBounceSound = true;
+                            }
+                        } else {
+                            let wallLeft = wall.startX;
+                            let wallRight = wall.endX;
+                            if (Math.abs(this.y - wall.y) < this.radius &&
+                                this.x > wallLeft &&
+                                this.x < wallRight) {
+                                this.y = this.dy > 0 ? wall.y - this.radius : wall.y + this.radius;
+                                this.dy = -this.dy;
+                                shouldBounceSound = true;
+                            }
+                        }
+                    }
+                });
+
+                if (shouldBounceSound && audioInitialized) {
+                    bounceSound.currentTime = 0;
+                    bounceSound.play().catch(() => {});
+                }
+            }
+        }
+
+        class Wall {
+            constructor(x, y, vertical, existingWalls) {
+                this.x = x;
+                this.y = y;
+                this.vertical = vertical;
+                this.length = 0;
+                this.growing = true;
+                this.color = 'blue';
+                this.existingWalls = existingWalls;
+                this.startX = x;
+                this.startY = y;
+                this.endX = x;
+                this.endY = y;
+                this.maxStart = vertical ? 0 : 0;
+                this.maxEnd = vertical ? canvas.height : canvas.width;
+                this.calculateBounds();
+                this.justCompleted = false;
+                this.createsEnclosure = this.checkForPotentialEnclosure();
+            }
+
+            calculateBounds() {
+                this.existingWalls.forEach(wall => {
+                    if (!wall.growing) {
+                        if (this.vertical && !wall.vertical) {
+                            if (this.x > wall.startX && this.x < wall.endX) {
+                                if (wall.y > this.y && wall.y < this.maxEnd) {
+                                    this.maxEnd = wall.y;
+                                }
+                                if (wall.y < this.y && wall.y > this.maxStart) {
+                                    this.maxStart = wall.y;
+                                }
+                            }
+                        } else if (!this.vertical && wall.vertical) {
+                            if (this.y > wall.startY && this.y < wall.endY) {
+                                if (wall.x > this.x && wall.x < this.maxEnd) {
+                                    this.maxEnd = wall.x;
+                                }
+                                if (wall.x < this.x && wall.x > this.maxStart) {
+                                    this.maxStart = wall.x;
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            checkForPotentialEnclosure() {
+                let connections = 0;
+                if (this.vertical) {
+                    if (this.maxStart === 0 || this.maxEnd === canvas.height) connections++;
+                    for (let wall of this.existingWalls) {
+                        if (!wall.growing && !wall.vertical) {
+                            if (this.x >= wall.startX && this.x <= wall.endX) {
+                                if (Math.abs(wall.y - this.maxStart) < 5 || Math.abs(wall.y - this.maxEnd) < 5) {
+                                    connections++;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    if (this.maxStart === 0 || this.maxEnd === canvas.width) connections++;
+                    for (let wall of this.existingWalls) {
+                        if (!wall.growing && wall.vertical) {
+                            if (this.y >= wall.startY && this.y <= wall.endY) {
+                                if (Math.abs(wall.x - this.maxStart) < 5 || Math.abs(wall.x - this.maxEnd) < 5) {
+                                    connections++;
+                                }
+                            }
+                        }
+                    }
+                }
+                return connections >= 2 || this.existingWalls.length > 2;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 3;
+                ctx.shadowBlur = 5;
+                ctx.shadowColor = 'blue';
+                if (this.vertical) {
+                    ctx.moveTo(this.x, this.startY);
+                    ctx.lineTo(this.x, this.endY);
+                } else {
+                    ctx.moveTo(this.startX, this.y);
+                    ctx.lineTo(this.endX, this.y);
+                }
+                ctx.stroke();
+                ctx.closePath();
+            }
+
+            update() {
+                if (this.growing) {
+                    this.length += 3;
+                    if (this.vertical) {
+                        this.startY = Math.max(this.y - this.length, this.maxStart);
+                        this.endY = Math.min(this.y + this.length, this.maxEnd);
+                        if (this.startY <= this.maxStart && this.endY >= this.maxEnd) {
+                            this.growing = false;
+                            this.startY = this.maxStart;
+                            this.endY = this.maxEnd;
+                            this.justCompleted = true;
+                        }
+                    } else {
+                        this.startX = Math.max(this.x - this.length, this.maxStart);
+                        this.endX = Math.min(this.x + this.length, this.maxEnd);
+                        if (this.startX <= this.maxStart && this.endX >= this.maxEnd) {
+                            this.growing = false;
+                            this.startX = this.maxStart;
+                            this.endX = this.maxEnd;
+                            this.justCompleted = true;
+                        }
+                    }
+                }
+            }
+
+            checkCollision(ball) {
+                if (this.growing) {
+                    if (this.vertical) {
+                        return Math.abs(ball.x - this.x) < ball.radius &&
+                               ball.y > this.startY &&
+                               ball.y < this.endY;
+                    } else {
+                        return Math.abs(ball.y - this.y) < ball.radius &&
+                               ball.x > this.startX &&
+                               ball.x < this.endX;
+                    }
+                }
+                return false;
+            }
+        }
+
+        let balls = [];
+        let walls = [];
+        let clearedAreas = [];
+        let gameOver = false;
+        let score = 0;
+        let lives = 3;
+        let stage = 1;
+        let targetPercentage = 75;
+        let clearedPercentage = 0;
+        let gameStarted = false;
+        let transitioningStage = false;
+
+        function init() {
+            balls = [];
+            walls = [];
+            clearedAreas = [];
+            gameOver = false;
+            score = 0;
+            lives = 3;
+            stage = 1;
+            targetPercentage = 75;
+            clearedPercentage = 0;
+            gameStarted = false;
+            transitioningStage = false;
+
+            // Add initial balls
+            for (let i = 0; i < 2; i++) {
+                balls.push(new Ball(
+                    Math.random() * (canvas.width - 40) + 20,
+                    Math.random() * (canvas.height - 40) + 20
+                ));
+            }
+        }
+
+        function startGame() {
+            init();
+            gameStarted = true;
+            mainMenu.style.display = 'none';
+            gameInfo.style.display = 'block';
+            scoreDisplay.textContent = `Score: ${score}`;
+            livesDisplay.textContent = `Lives: ${lives}`;
+            stageDisplay.textContent = `Stage: ${stage}`;
+            updateProgressBar();
+            gameLoop();
+
+            // Initialize audio after user interaction
+            audioInitialized = true;
+        }
+
+        canvas.addEventListener('click', (e) => {
+            if (!gameOver && lives > 0 && gameStarted && !transitioningStage) {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const vertical = !e.ctrlKey && !e.altKey && !e.shiftKey && e.button !== 2;
+                const newWall = new Wall(x, y, vertical, walls);
+                if (newWall.createsEnclosure) {
+                    walls.push(newWall);
+                    if (audioInitialized) {
+                        wallSound.currentTime = 0;
+                        wallSound.play().catch(() => {});
+                    }
+                }
+            }
+        });
+
+        function findClosedAreas() {
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const visited = new Set();
+            const areas = [];
+
+            function getKey(x, y) {
+                return `${x},${y}`;
+            }
+
+            function isWall(x, y) {
+                const index = (y * canvas.width + x) * 4;
+                return imageData.data[index + 3] > 0; // Check alpha channel
+            }
+
+            function floodFill(startX, startY) {
+                const area = new Set();
+                const stack = [[startX, startY]];
+                let touchesBoundary = false;
+
+                while (stack.length > 0) {
+                    const [x, y] = stack.pop();
+                    const key = getKey(x, y);
+
+                    if (visited.has(key)) continue;
+                    if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) continue;
+                    if (isWall(x, y)) continue;
+
+                    visited.add(key);
+                    area.add(key);
+
+                    if (x === 0 || x === canvas.width - 1 || y === 0 || y === canvas.height - 1) {
+                        touchesBoundary = true;
+                    }
+
+                    stack.push([x + 1, y]);
+                    stack.push([x - 1, y]);
+                    stack.push([x, y + 1]);
+                    stack.push([x, y - 1]);
+                }
+
+                if (!touchesBoundary && area.size > 0) {
+                    areas.push(Array.from(area).map(key => {
+                        const [x, y] = key.split(',').map(Number);
+                        return { x, y };
+                    }));
+                }
+            }
+
+            // Clear canvas and draw walls
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            walls.forEach(wall => wall.draw());
+
+            // Find closed areas
+            for (let x = 0; x < canvas.width; x++) {
+                for (let y = 0; y < canvas.height; y++) {
+                    if (!visited.has(getKey(x, y)) && !isWall(x, y)) {
+                        floodFill(x, y);
+                    }
+                }
+            }
+
+            return areas;
+        }
+
+        function updateClearedAreas() {
+            const newAreas = findClosedAreas();
+            let totalArea = 0;
+            let validAreas = [];
+
+            // Check each area for balls
+            newAreas.forEach(area => {
+                let containsBall = false;
+                for (let ball of balls) {
+                    if (area.some(point => {
+                        const dx = point.x - ball.x;
+                        const dy = point.y - ball.y;
+                        return Math.sqrt(dx * dx + dy * dy) <= ball.radius;
+                    })) {
+                        containsBall = true;
+                        break;
+                    }
+                }
+
+                if (!containsBall) {
+                    validAreas.push(area);
+                    totalArea += area.length;
+                }
+            });
+
+            clearedAreas = validAreas;
+            const totalPixels = canvas.width * canvas.height;
+            clearedPercentage = (totalArea / totalPixels) * 100;
+            updateProgressBar();
+
+            // Check if stage is cleared
+            if (clearedPercentage >= targetPercentage) {
+                transitionToNextStage();
+            }
+        }
+
+        function transitionToNextStage() {
+            if (!transitioningStage) {
+                transitioningStage = true;
+                if (audioInitialized) {
+                    stageSound.currentTime = 0;
+                    stageSound.play().catch(() => {});
+                }
+
+                // Show transition screen
+                transitionScreen.style.display = 'flex';
+                transitionScreen.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+
+                // Update score and stage
+                score += Math.floor(clearedPercentage - targetPercentage) * stage * 10;
+                stage++;
+
+                // Prepare next stage
+                setTimeout(() => {
+                    balls.forEach(ball => ball.speedUp());
+                    if (stage % 2 === 0) {
+                        balls.push(new Ball(
+                            Math.random() * (canvas.width - 40) + 20,
+                            Math.random() * (canvas.height - 40) + 20
+                        ));
+                    }
+
+                    // Reset stage
+                    walls = [];
+                    clearedAreas = [];
+                    clearedPercentage = 0;
+                    targetPercentage = Math.min(75 + stage, 90);
+
+                    // Update display
+                    scoreDisplay.textContent = `Score: ${score}`;
+                    stageDisplay.textContent = `Stage: ${stage}`;
+                    updateProgressBar();
+
+                    // Hide transition screen
+                    transitionScreen.style.backgroundColor = 'rgba(0, 0, 0, 0)';
+                    setTimeout(() => {
+                        transitionScreen.style.display = 'none';
+                        transitioningStage = false;
+                    }, 500);
+                }, 2000);
+            }
+        }
+
+        function updateProgressBar() {
+            progressBar.style.width = `${clearedPercentage}%`;
+            targetMarker.style.left = `${targetPercentage}%`;
+        }
+
+        function drawClearedAreas() {
+            ctx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+            clearedAreas.forEach(area => {
+                ctx.beginPath();
+                area.forEach(point => {
+                    ctx.rect(point.x, point.y, 1, 1);
+                });
+                ctx.fill();
+            });
+        }
+
+        function gameLoop() {
+            if (!gameOver && lives > 0) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Update and draw walls
+                walls.forEach(wall => {
+                    wall.update();
+                    wall.draw();
+                });
+
+                // Check for completed walls
+                walls.forEach(wall => {
+                    if (wall.justCompleted) {
+                        wall.justCompleted = false;
+                        updateClearedAreas();
+                    }
+                });
+
+                // Draw cleared areas
+                drawClearedAreas();
+
+                // Update and draw balls
+                balls.forEach(ball => {
+                    ball.update(walls);
+                    ball.draw();
+
+                    // Check collision with growing walls
+                    walls.forEach(wall => {
+                        if (wall.checkCollision(ball)) {
+                            lives--;
+                            livesDisplay.textContent = `Lives: ${lives}`;
+                            walls = walls.filter(w => !w.growing);
+                            if (audioInitialized) {
+                                hitSound.currentTime = 0;
+                                hitSound.play().catch(() => {});
+                            }
+                            if (lives <= 0) {
+                                showGameOver();
+                            }
+                        }
+                    });
+                });
+
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function showGameOver() {
+            gameOver = true;
+            transitionScreen.textContent = `Game Over!\nScore: ${score}`;
+            transitionScreen.style.display = 'flex';
+            transitionScreen.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+
+            // Show restart button
+            setTimeout(() => {
+                mainMenu.style.display = 'block';
+                startButton.textContent = 'Play Again';
+            }, 2000);
+        }
+
+        function restartGame() {
+            transitionScreen.style.display = 'none';
+            startGame();
+        }
+
+        bounceSound.load();
+
+        mainMenu.style.display = 'block';
+        gameInfo.style.display = 'none';
+
+        startButton.addEventListener('click', startGame);
+
+        // Prevent right-click menu
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+    </script>
+</body>
+</html>
